@@ -27,20 +27,27 @@ class CloverPluginConvention {
     File testClassesBackupDir
     String licenseLocation
     String initString
-    Boolean enabled = Boolean.TRUE
+    boolean enabled = true
+    Boolean useClover3 = null
     String targetPercentage
     boolean optimizeTests
     String snapshotFile
-    Set<File> additionalSourceDirs
-    Set<File> additionalTestDirs
+    String historyDir
+    List<CloverSourceSet> additionalSourceSets = []
+    List<CloverSourceSet> additionalTestSourceSets =[]
     List<String> includes
     List<String> excludes
     List<String> testIncludes
+    List<String> testExcludes
     CloverReportConvention report = new CloverReportConvention()
     CloverContextsConvention contexts = new CloverContextsConvention()
     CloverCompilerConvention compiler = new CloverCompilerConvention()
     List<String> includeTasks
     List<String> excludeTasks
+    String instrumentLambda
+    boolean debug = false
+    int flushinterval = 1000
+    FlushPolicy flushpolicy = FlushPolicy.directed
 
     def clover(Closure closure) {
         ConfigureUtil.configure(closure, this)
@@ -60,9 +67,25 @@ class CloverPluginConvention {
 
     def method(Closure closure) {
         closure.resolveStrategy = Closure.DELEGATE_FIRST
-        CloverContextConvention methodContext = new CloverContextConvention()
+        CloverMethodContextConvention methodContext = new CloverMethodContextConvention()
         closure.delegate = methodContext
         contexts.methods << methodContext
+        closure()
+    }
+
+    def additionalSourceSet(Closure closure) {
+        closure.resolveStrategy = Closure.DELEGATE_FIRST
+        CloverSourceSet additionalSourceSet = new CloverSourceSet()
+        closure.delegate = additionalSourceSet
+        additionalSourceSets << additionalSourceSet
+        closure()
+    }
+
+    def additionalTestSourceSet(Closure closure) {
+        closure.resolveStrategy = Closure.DELEGATE_FIRST
+        CloverSourceSet additionalTestSourceSet = new CloverSourceSet()
+        closure.delegate = additionalTestSourceSet
+        additionalTestSourceSets << additionalTestSourceSet
         closure()
     }
 

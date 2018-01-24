@@ -6,3 +6,8 @@ out
 .idea
 .clover
 .gradle
+/bin/
+/.classpath
+/.project
+/.settings/
+.DS_Store

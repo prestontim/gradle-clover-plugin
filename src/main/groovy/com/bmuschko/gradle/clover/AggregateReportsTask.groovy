@@ -15,14 +15,26 @@
  */
 package com.bmuschko.gradle.clover
 
+import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.Optional
+
 /**
  * Task for aggregrating Clover code coverage reports.
  *
  * @author Benjamin Muschko
  */
 class AggregateReportsTask extends CloverReportTask {
+    @Input
     List<File> subprojectBuildDirs
+    @Optional
+    @Input
     String filter
+    @Optional
+    @Input
+    String testResultsDir
+    @Optional
+    @Input
+    String testResultsInclude
 
     @Override
     void generateCodeCoverage() {
@@ -33,7 +45,7 @@ class AggregateReportsTask extends CloverReportTask {
         logger.info 'Starting to aggregate Clover code coverage reports.'
 
         mergeSubprojectCloverDatabases()
-        writeReports(getFilter())
+        writeReports(getFilter(), getTestResultsDir(), getTestResultsInclude())
 
         logger.info 'Finished aggregating Clover code coverage reports.'
     }

@@ -44,16 +44,46 @@ abstract class CloverReportTask extends DefaultTask {
     @OutputDirectory
     File reportsDir
 
-    /**
-     * Mandatory Clover license file.
-     */
-    @InputFile
-    File licenseFile
-
+    // Enabled report types.
+    @Input
     Boolean xml
+    @Input
     Boolean json
+    @Input
     Boolean html
+    @Input
     Boolean pdf
+    @Input
+    Boolean historical
+
+    @Input
+    Collection<CloverReportColumn> additionalColumns
+    
+    /**
+     * Optional Clover history directory.
+     */
+    @OutputDirectory
+    File historyDir
+
+    // Historical report parameters.
+    @Optional
+    @Input
+    String historyIncludes
+    @Optional
+    @Input
+    String packageFilter
+    @Optional
+    @Input
+    String from
+    @Optional
+    @Input
+    String to
+    @Optional
+    @Input
+    HistoricalAdded added
+    @Optional
+    @Input
+    Collection<HistoricalMover> movers
 
     /**
      * Checks to see if at least on report type is selected.
@@ -105,25 +135,40 @@ abstract class CloverReportTask extends DefaultTask {
      *
      * @param filter Optional filter
      */
-    protected void writeReports(String filter = null) {
+    protected void writeReports(String filter, String testResultsDir = null, String testResultsInclude = null) {
         File cloverReportDir = new File("${getReportsDir()}/clover")
 
+        if (getHistorical()) {
+            createHistoryPoint(filter, testResultsDir, testResultsInclude)
+        }
+
         if(getXml()) {
-            writeReport(new File(cloverReportDir, 'clover.xml'), ReportType.XML, filter)
+            writeReport(new File(cloverReportDir, 'clover.xml'), ReportType.XML, filter, testResultsDir, testResultsInclude)
         }
 
         if(getJson()) {
-            writeReport(new File(cloverReportDir, 'json'), ReportType.JSON, filter)
+            writeReport(new File(cloverReportDir, 'json'), ReportType.JSON, filter, testResultsDir, testResultsInclude)
         }
 
         if(getHtml()) {
-            writeReport(new File(cloverReportDir, 'html'), ReportType.HTML, filter)
+            writeReport(new File(cloverReportDir, 'html'), ReportType.HTML, filter, testResultsDir, testResultsInclude)
         }
 
         if(getPdf()) {
-            ant."clover-pdf-report"(initString: "${project.buildDir.canonicalPath}/${getInitString()}",
-                    outfile: new File(cloverReportDir, 'clover.pdf'), title: project.name)
+            writeReport(new File(cloverReportDir, 'clover.pdf'), ReportType.PDF, filter, testResultsDir, testResultsInclude)
         }
+    }
+
+    private void createHistoryPoint(String filter, String testResultsDir, String testResultsInclude) {
+        logger.info 'Starting to create a Clover history point in ${getHistoryDir()}.'
+
+        ant."clover-historypoint"(initString: "$project.buildDir/${getInitString()}", historyDir: getHistoryDir(), overwrite: 'true') {
+            if (testResultsDir) {
+                testresults(dir: testResultsDir, includes: testResultsInclude)
+            }
+        }
+
+        logger.info 'Finished creating a Clover history point.'
     }
 
     /**
@@ -133,14 +178,62 @@ abstract class CloverReportTask extends DefaultTask {
      * @param reportType Report type
      * @param filter Optional filter
      */
-    private void writeReport(File outfile, ReportType reportType, String filter) {
+    private void writeReport(File outfile, ReportType reportType, String filter, String testResultsDir, String testResultsInclude) {
         ant."clover-report"(initString: "$project.buildDir/${getInitString()}") {
-            current(outfile: outfile, title: project.name) {
-                if(filter) {
-                    format(type: reportType.format, filter: filter)
+            def params = [ outfile: outfile, title: project.name ]
+            if (reportType == ReportType.PDF)
+                params.summary = 'true'
+            def formatParams = [ type: reportType.format ]
+            if (filter) {
+                formatParams.filter = filter
+            }
+            current(params) {
+                format(formatParams)
+                if (testResultsDir) {
+                    testresults(dir: testResultsDir, includes: testResultsInclude)
                 }
-                else {
-                    format(type: reportType.format)
+                if (getAdditionalColumns()) {
+                    columns {
+                        for (CloverReportColumn col in getAdditionalColumns()) {
+                            String name = col.getColumn()
+                            "$name"(col.getAttributes())
+                        }
+                    }
+                }
+            }
+
+            // Historical report is supported only for HTML and PDF reports
+            if (getHistorical() && (reportType == ReportType.HTML || reportType == ReportType.PDF)) {
+                if (reportType == ReportType.PDF) {
+                    outfile = new File(outfile.parentFile, 'historical.pdf')
+                }
+                def historyParams = [ outfile: outfile, title: project.name, historyDir: getHistoryDir(), historyIncludes: getHistoryIncludes() ]
+                if (getPackageFilter()) {
+                    historyParams.packageFilter = getPackageFilter()
+                }
+                if (getFrom()) {
+                    historyParams.from = getFrom()
+                }
+                if (getTo()) {
+                    historyParams.to = getTo()
+                }
+
+                historical(historyParams) {
+                    format(formatParams)
+                    overview()
+                    coverage()
+                    metrics()
+
+                    if (getAdded()) {
+                        getAdded().with {
+                            added(range: range, interval: interval)
+                        }
+                    }
+                    getMovers().each { mover ->
+                        mover.with {
+                            movers(threshold: "${threshold}%", range: range, interval: interval)
+                        }
+                    }
                 }
             }
         }
@@ -151,7 +244,6 @@ abstract class CloverReportTask extends DefaultTask {
      */
     private void initAntTasks() {
         ant.taskdef(resource: 'cloverlib.xml', classpath: getCloverClasspath().asPath)
-        ant.property(name: 'clover.license.path', value: getLicenseFile().canonicalPath)
     }
 
     @TaskAction

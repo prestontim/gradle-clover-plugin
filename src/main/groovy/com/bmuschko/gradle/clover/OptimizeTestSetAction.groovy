@@ -21,6 +21,7 @@ import org.gradle.api.specs.Spec
 import org.gradle.api.Task
 import org.gradle.api.file.FileCollection
 import org.gradle.api.file.FileTreeElement
+import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputDirectory
 import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.Optional
@@ -38,10 +39,9 @@ class OptimizeTestSetAction implements Action<Task>, Spec<FileTreeElement> {
     String initString
     boolean optimizeTests
     FileCollection cloverClasspath
-    @InputFile File licenseFile
     @Optional @InputFile File snapshotFile
     @InputDirectory File buildDir
-    Set<File> testSrcDirs
+    @Input List<CloverSourceSet> testSourceSets
     Set<String> includes
 
     @Override
@@ -54,11 +54,12 @@ class OptimizeTestSetAction implements Action<Task>, Spec<FileTreeElement> {
             log.info 'Optimizing test set.'
 
             def ant = new AntBuilder()
-            ant.taskdef(resource: 'cloverjunitlib.xml', classpath: getCloverClasspath().asPath)
-            ant.property(name: 'clover.license.path', value: getLicenseFile().canonicalPath)
+            def resource = 'cloverlib.xml'
+            ant.taskdef(resource: resource, classpath: getCloverClasspath().asPath)
             ant.property(name: 'clover.initstring', value: "${getBuildDir()}/${getInitString()}")
+            List<File> testSrcDirs = CloverSourceSetUtils.getSourceDirs(getTestSourceSets())
             def testset = ant."clover-optimized-testset"(snapshotFile: getSnapshotFile(), debug: true) {
-                getTestSrcDirs().each { testSrcDir ->
+                testSrcDirs.each { testSrcDir ->
                     ant.fileset(dir: testSrcDir)
                 }
             }
@@ -74,7 +75,7 @@ class OptimizeTestSetAction implements Action<Task>, Spec<FileTreeElement> {
 
     @Override
     boolean isSatisfiedBy(FileTreeElement element) {
-        if(includes != null && !element.directory) {
+        if (includes != null && !element.directory) {
             def match = includes.find {
                 element.file.path.endsWith(it)
             }
